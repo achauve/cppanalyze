@@ -12,6 +12,7 @@
 #include "clang/Frontend/CompilerInstance.h"
 
 #include "clang/Basic/SourceManager.h"
+#include "clang/Basic/SourceLocation.h" // FileID
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/FileManager.h" // FileEntry
 
@@ -56,7 +57,8 @@ class CommonASTConsumer : public ASTConsumer
 protected:
     CommonASTConsumer(CompilerInstance& compiler):
         m_compiler(compiler),
-        m_source_manager(compiler.getSourceManager())
+        m_source_manager(compiler.getSourceManager()),
+        m_src_root_dir("tests")
     {}
 
 
@@ -69,33 +71,36 @@ protected:
         diagnostics.Report(full, id);
     }
 
-    bool shouldIgnoreLoc(SourceLocation loc) const
+    bool shouldIgnoreLoc(SourceLocation loc)
     {
-        return !m_source_manager.isFromMainFile(loc);
+        loc = m_source_manager.getInstantiationLoc(loc);
+        if (loc.isInvalid()) return true;
 
-        // loc = m_source_manager.getInstantiationLoc(loc);
-        // if (loc.isInvalid()) return true;
-
-        // // ignore stuff from system headers
-        // if (m_source_manager.isInSystemHeader(loc)) return true;
+        // ignore stuff from system headers
+        if (m_source_manager.isInSystemHeader(loc)) return true;
 
 
-        // const FullSourceLoc full_loc(loc, m_source_manager);
-        // const FileEntry* const file_entry =
-        //     m_source_manager.getFileEntryForID(full_loc.getFileID());
+        const FullSourceLoc full_loc(loc, m_source_manager);
+        const FileEntry* const file_entry =
+            m_source_manager.getFileEntryForID(full_loc.getFileID());
 
-        // bool result = full_loc.getFileID() == m_source_manager.getMainFileID();
-        // if (file_entry)
-        // {
-        //     const std::string dir(file_entry->getDir()->getName());
-        //     result |= llvm::StringRef(dir).find(root_src_dir) != llvm::StringRef::npos ;
-        // }
+        bool result = full_loc.getFileID() == m_source_manager.getMainFileID();
+        if (!result && file_entry)
+        {
+            const std::string dir(file_entry->getDir()->getName());
+            result = llvm::StringRef(dir).find(m_src_root_dir) != llvm::StringRef::npos ;
+        }
 
-        // return !result;
+        if (result)
+            m_traversed_file_ids.push_back(full_loc.getFileID());
+
+        return !result;
     }
 
     CompilerInstance& m_compiler;
     SourceManager& m_source_manager;
+    std::string m_src_root_dir;
+    std::vector<FileID> m_traversed_file_ids;
 };
 
 
@@ -116,6 +121,36 @@ public:
     {}
 
 
+    void rewriteFiles()
+    {
+        std::sort(m_traversed_file_ids.begin(), m_traversed_file_ids.end());
+        std::vector<FileID>::iterator new_end = std::unique(m_traversed_file_ids.begin(),
+                                                            m_traversed_file_ids.end());
+
+        for (std::vector<FileID>::const_iterator id = m_traversed_file_ids.begin();
+             id != new_end; ++id)
+        {
+            const FileEntry& file_entry = *m_source_manager.getFileEntryForID(*id);
+
+            // Get the buffer corresponding to the current FileID.
+            // If we haven't changed it, then we are done.
+            if (const RewriteBuffer* rewriter_buffer =
+                m_rewriter.getRewriteBufferFor(*id))
+            {
+                llvm::outs() << "--------------------\nSrc file changed: " << file_entry.getName() << "\n";
+                *m_out_file << std::string(rewriter_buffer->begin(), rewriter_buffer->end());
+            }
+            else
+            {
+                llvm::errs() << "--------------------\nNo changes in " << file_entry.getName() << "\n";
+            }
+
+            m_out_file->flush();
+
+        }
+
+    }
+
     //===--------------------------------------------------------------------===//
     // ASTConsumer virtual interface
     //===--------------------------------------------------------------------===//
@@ -127,20 +162,7 @@ public:
         TranslationUnitDecl* tu_decl = context.getTranslationUnitDecl();
         TraverseDecl(tu_decl);
 
-        // Get the buffer corresponding to MainFileID.
-        // If we haven't changed it, then we are done.
-        if (const RewriteBuffer* rewriter_buffer =
-            m_rewriter.getRewriteBufferFor(m_source_manager.getMainFileID()))
-        {
-            llvm::outs() << "Src file changed.\n";
-            *m_out_file << std::string(rewriter_buffer->begin(), rewriter_buffer->end());
-        }
-        else
-        {
-            llvm::errs() << "No changes.\n";
-        }
-
-        m_out_file->flush();
+        rewriteFiles();
     }
 
 

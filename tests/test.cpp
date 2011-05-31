@@ -1,17 +1,6 @@
+#include "test.h"
+
 #include <iostream>
-
-template<class T>
-struct TemplateFoo
-{
-    int int_bar;
-};
-
-
-struct Foo
-{
-    double double_bar;
-};
-
 
 int main()
 {
