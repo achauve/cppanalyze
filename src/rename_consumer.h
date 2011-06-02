@@ -3,6 +3,7 @@
 
 #include <sstream>
 #include <string>
+#include <fstream>
 
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
@@ -20,6 +21,8 @@
 
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/PathV2.h"
+#include "llvm/Support/FileSystem.h"
 
 
 using namespace clang;
@@ -107,7 +110,6 @@ protected:
 class RenameConsumer : public CommonASTConsumer, public RecursiveASTVisitor<RenameConsumer>
 {
     Rewriter m_rewriter;
-    llvm::raw_ostream* m_out_file;
 
     // store new names of given named declarations
     typedef std::map<NamedDecl*, std::string> RenameMapType;
@@ -116,13 +118,14 @@ class RenameConsumer : public CommonASTConsumer, public RecursiveASTVisitor<Rena
 public:
     RenameConsumer(CompilerInstance& compiler):
         CommonASTConsumer(compiler),
-        m_rewriter(m_source_manager, compiler.getLangOpts()),
-        m_out_file(&llvm::errs())
+        m_rewriter(m_source_manager, compiler.getLangOpts())
     {}
 
 
     void rewriteFiles()
     {
+        using namespace llvm::sys; // for path:: and fs::
+
         std::sort(m_traversed_file_ids.begin(), m_traversed_file_ids.end());
         std::vector<FileID>::iterator new_end = std::unique(m_traversed_file_ids.begin(),
                                                             m_traversed_file_ids.end());
@@ -132,21 +135,31 @@ public:
         {
             const FileEntry& file_entry = *m_source_manager.getFileEntryForID(*id);
 
+            const llvm::StringRef parent_path = path::parent_path(file_entry.getName());
+            const llvm::StringRef filename = path::filename(file_entry.getName());
+            /// XXX make it portable
+            const llvm::Twine renamed_path = "./cppanalyze-renamed/" + parent_path + "/";
+
+            bool existed;
+            llvm::error_code code = fs::create_directories(renamed_path, existed);
+            assert(code == llvm::errc::success);
+            const llvm::Twine rewrited_file = renamed_path + filename;
+
+
             // Get the buffer corresponding to the current FileID.
             // If we haven't changed it, then we are done.
             if (const RewriteBuffer* rewriter_buffer =
                 m_rewriter.getRewriteBufferFor(*id))
             {
                 llvm::outs() << "--------------------\nSrc file changed: " << file_entry.getName() << "\n";
-                *m_out_file << std::string(rewriter_buffer->begin(), rewriter_buffer->end());
+                llvm::outs() << "===> Rewriting file: " << rewrited_file << "\n";
+                std::ofstream out(rewrited_file.str().c_str());
+                // XXX do not rewrite file if not neccessary; if file already
+                // exists, assert there is no diff
+                out << std::string(rewriter_buffer->begin(), rewriter_buffer->end());
             }
             else
-            {
-                llvm::errs() << "--------------------\nNo changes in " << file_entry.getName() << "\n";
-            }
-
-            m_out_file->flush();
-
+                llvm::outs() << "--------------------\nNo changes in " << file_entry.getName() << "\n";
         }
 
     }
