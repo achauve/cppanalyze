@@ -10,7 +10,18 @@ struct TemplateFoo
 
 struct Foo
 {
+    Foo():
+        double_bar(0.)
+    {}
+
     double double_bar;
+
+    void inlineSetBar(double v)
+    {
+        double_bar = v;
+    }
+
+    void setBar(double v);
 };
 
 #endif // CPPANALYZE_TEST_H

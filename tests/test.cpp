@@ -2,6 +2,11 @@
 
 #include <iostream>
 
+void Foo::setBar(double v)
+{
+    double_bar = v;
+}
+
 int main()
 {
     std::cout << "Hello, CppAnalyze!" << std::endl;
