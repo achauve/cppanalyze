@@ -58,10 +58,10 @@ FieldDecl* getInstantiatedFrom(FieldDecl const * const d)
 class CommonASTConsumer : public ASTConsumer
 {
 protected:
-    CommonASTConsumer(CompilerInstance& compiler):
+    CommonASTConsumer(CompilerInstance& compiler, const std::string src_root_dir):
         m_compiler(compiler),
         m_source_manager(compiler.getSourceManager()),
-        m_src_root_dir("tests")
+        m_src_root_dir(src_root_dir)
     {}
 
 
@@ -116,8 +116,8 @@ class RenameConsumer : public CommonASTConsumer, public RecursiveASTVisitor<Rena
     RenameMapType m_renamed_decls;
 
 public:
-    RenameConsumer(CompilerInstance& compiler):
-        CommonASTConsumer(compiler),
+    RenameConsumer(CompilerInstance& compiler, const std::string src_root_dir):
+        CommonASTConsumer(compiler, src_root_dir),
         m_rewriter(m_source_manager, compiler.getLangOpts())
     {}
 
