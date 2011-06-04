@@ -249,15 +249,15 @@ public:
 
     bool VisitFunctionDecl(FunctionDecl* fun_decl)
     {
-        if (shouldIgnoreLoc(fun_decl->getLocation())) return true;
+        // if (shouldIgnoreLoc(fun_decl->getLocation())) return true;
 
-        // ignore main function and methods
-        if (!fun_decl->isMain() && !isa<CXXMethodDecl>(fun_decl))
-        {
-            std::stringstream ss;
-            ss << fun_decl->getNameAsString() << "-renamed";
-            change_and_rewrite(fun_decl, ss.str(), fun_decl->getNameInfo().getLoc());
-        }
+        // // ignore main function and methods
+        // if (!fun_decl->isMain() && !isa<CXXMethodDecl>(fun_decl))
+        // {
+        //     std::stringstream ss;
+        //     ss << fun_decl->getNameAsString() << "-renamed";
+        //     change_and_rewrite(fun_decl, ss.str(), fun_decl->getNameInfo().getLoc());
+        // }
 
         return true;
     }
