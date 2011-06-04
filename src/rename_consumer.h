@@ -157,6 +157,8 @@ public:
                 // XXX do not rewrite file if not neccessary; if file already
                 // exists, assert there is no diff
                 out << std::string(rewriter_buffer->begin(), rewriter_buffer->end());
+                llvm::outs() << std::string(rewriter_buffer->begin(), rewriter_buffer->end());
+                out.flush();
             }
             else
                 llvm::outs() << "--------------------\nNo changes in " << file_entry.getName() << "\n";
