@@ -266,23 +266,63 @@ public:
     {
         if (shouldIgnoreLoc(field_decl->getLocation())) return true;
 
-        const std::string name = field_decl->getNameAsString();
-        const llvm::StringRef llvm_name(name);
-        if (!llvm_name.startswith("m_"))
+        std::string new_field_name;
+        if (renameField(field_decl->getNameAsString(), new_field_name))
         {
             emitWarning(field_decl->getLocation(), "wrong name for field");
+            change_and_rewrite(field_decl, new_field_name, field_decl->getLocation());
+        }
 
+        return true;
+    }
+
+
+    bool VisitCXXConstructorDecl(CXXConstructorDecl* constructor_decl)
+    {
+        if (shouldIgnoreLoc(constructor_decl->getLocation())) return true;
+
+        for (CXXConstructorDecl::init_iterator i=constructor_decl->init_begin(),
+             e=constructor_decl->init_end();
+             i != e;
+             ++i)
+        {
+            // skip non meber initializers (base class initializers)
+            if (!(*i)->isMemberInitializer())
+                continue;
+            // skip non-explicitly-written calls to default member initializer/constructor
+            if (!(*i)->isWritten())
+                continue;
+
+            FieldDecl* field_decl = (*i)->getMember();
+            assert(field_decl);
+
+            std::string new_field_name;
+            if (renameField(field_decl->getNameAsString(), new_field_name))
+            {
+                change_and_rewrite(field_decl, new_field_name, (*i)->getMemberLocation());
+            }
+        }
+
+        return true;
+    }
+
+
+    bool renameField(const std::string& field_name, std::string& new_name) const
+    {
+        const llvm::StringRef llvm_name(field_name);
+        if (!llvm_name.startswith("m_"))
+        {
             std::stringstream ss;
             if (llvm_name.startswith("_"))
                 ss << "m";
             else
                 ss << "m_";
-            ss << name;
-
-            change_and_rewrite(field_decl, ss.str(), field_decl->getLocation());
+            ss << field_name;
+            new_name = ss.str();
+            return true;
         }
 
-        return true;
+        return false;
     }
 };
 
