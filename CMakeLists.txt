@@ -34,4 +34,6 @@ add_library(cppanalyze SHARED "src/cppanalyze.cpp")
 
 target_link_libraries(cppanalyze
     ${clang_used_libraries}
+    # XXX add find boost and clean that
+    boost_filesystem
 )

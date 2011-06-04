@@ -21,9 +21,8 @@
 
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/PathV2.h"
-#include "llvm/Support/FileSystem.h"
 
+#include "boost/filesystem.hpp"
 
 using namespace clang;
 
@@ -124,7 +123,7 @@ public:
 
     void rewriteFiles()
     {
-        using namespace llvm::sys; // for path:: and fs::
+        namespace fs = boost::filesystem;
 
         std::sort(m_traversed_file_ids.begin(), m_traversed_file_ids.end());
         std::vector<FileID>::iterator new_end = std::unique(m_traversed_file_ids.begin(),
@@ -135,16 +134,11 @@ public:
         {
             const FileEntry& file_entry = *m_source_manager.getFileEntryForID(*id);
 
-            const llvm::StringRef parent_path = path::parent_path(file_entry.getName());
-            const llvm::StringRef filename = path::filename(file_entry.getName());
-            /// XXX make it portable
-            const llvm::Twine renamed_path = "./cppanalyze-renamed/" + parent_path + "/";
+            const fs::path file_path(file_entry.getName());
+            const fs::path renamed_path = "cppanalyze-renamed" / file_path.parent_path();
+            const fs::path renamed_file_path = renamed_path / file_path.filename();
 
-            bool existed;
-            llvm::error_code code = fs::create_directories(renamed_path, existed);
-            assert(code == llvm::errc::success);
-            const llvm::Twine rewrited_file = renamed_path + filename;
-
+            fs::create_directories(renamed_path);
 
             // Get the buffer corresponding to the current FileID.
             // If we haven't changed it, then we are done.
@@ -152,13 +146,12 @@ public:
                 m_rewriter.getRewriteBufferFor(*id))
             {
                 llvm::outs() << "--------------------\nSrc file changed: " << file_entry.getName() << "\n";
-                llvm::outs() << "===> Rewriting file: " << rewrited_file << "\n";
-                std::ofstream out(rewrited_file.str().c_str());
+                llvm::outs() << "===> Rewriting file: " << renamed_file_path.string() << "\n";
+                std::ofstream out(renamed_file_path.c_str(), std::ios::out | std::ios::trunc);
+                assert(out.good());
                 // XXX do not rewrite file if not neccessary; if file already
                 // exists, assert there is no diff
                 out << std::string(rewriter_buffer->begin(), rewriter_buffer->end());
-                llvm::outs() << std::string(rewriter_buffer->begin(), rewriter_buffer->end());
-                out.flush();
             }
             else
                 llvm::outs() << "--------------------\nNo changes in " << file_entry.getName() << "\n";
