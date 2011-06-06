@@ -175,30 +175,46 @@ public:
 
 
     //===--------------------------------------------------------------------===//
-    // tools to save changes
+    // renaming/rewriting helpers
     //===--------------------------------------------------------------------===//
 
-    void rewrite_if_found(NamedDecl* const d, const SourceLocation& loc)
+    std::string renameDecl(NamedDecl * const decl)
     {
-        RenameMapType::const_iterator decl_it = m_renamed_decls.find(d);
+        assert(decl);
 
+        RenameMapType::const_iterator decl_it = m_renamed_decls.find(decl);
         if (decl_it != m_renamed_decls.end())
-            write(d, decl_it->second, loc);
+            return decl_it->second;
+
+        std::string decl_name = decl->getNameAsString();
+        const llvm::StringRef llvm_name(decl_name);
+        if (!llvm_name.startswith("m_"))
+        {
+            emitWarning(decl->getLocation(), "wrong name");
+
+            std::stringstream ss;
+            if (llvm_name.startswith("_"))
+                ss << "m";
+            else
+                ss << "m_";
+            ss << decl_name;
+            decl_name = ss.str();
+
+            m_renamed_decls[decl] = decl_name;
+        }
+
+        return decl_name;
     }
 
-    void change_and_rewrite(NamedDecl* const d, const std::string& new_name,
-                            const SourceLocation& loc)
+    void rewriteDecl(NamedDecl * const d, const SourceLocation& loc)
     {
-        m_renamed_decls[d] = new_name;
-        write(d, new_name, loc);
-    }
+        const std::string decl_name = d->getNameAsString();
+        const std::string new_name = renameDecl(d);
 
-    void write(NamedDecl* const d, const std::string& new_name,
-               const SourceLocation& loc)
-    {
-        m_rewriter.ReplaceText(loc,
-                               d->getNameAsString().length(),
-                               new_name);
+        if (decl_name != new_name)
+            m_rewriter.ReplaceText(loc,
+                                   decl_name.length(),
+                                   renameDecl(d));
     }
 
     //===--------------------------------------------------------------------===//
@@ -209,13 +225,13 @@ public:
 
     bool VisitCallExpr(CallExpr *Node)
     {
-        if (shouldIgnoreLoc(Node->getExprLoc())) return true;
+        // if (shouldIgnoreLoc(Node->getExprLoc())) return true;
 
-        if (Node->getDirectCallee())
-        {
-            FunctionDecl *func_decl = Node->getDirectCallee();
-            rewrite_if_found(func_decl, Node->getLocStart());
-        }
+        // if (Node->getDirectCallee())
+        // {
+        //     FunctionDecl *func_decl = Node->getDirectCallee();
+        //     rewriteDecl(func_decl, Node->getLocStart());
+        // }
         return true;
     }
 
@@ -232,8 +248,10 @@ public:
         if (FieldDecl *template_parent_field_decl = getInstantiatedFrom(member_decl))
             member_decl = template_parent_field_decl;
 
+        if (shouldIgnoreLoc(member_decl->getLocation())) return true;
+
         assert(member_decl); // we handle only c++ code
-        rewrite_if_found(member_decl, Node->getMemberLoc());
+        rewriteDecl(member_decl, Node->getMemberLoc());
         return true;
     }
 
@@ -259,13 +277,7 @@ public:
     {
         if (shouldIgnoreLoc(field_decl->getLocation())) return true;
 
-        std::string new_field_name;
-        if (renameField(field_decl->getNameAsString(), new_field_name))
-        {
-            emitWarning(field_decl->getLocation(), "wrong name for field");
-            change_and_rewrite(field_decl, new_field_name, field_decl->getLocation());
-        }
-
+        rewriteDecl(field_decl, field_decl->getLocation());
         return true;
     }
 
@@ -289,34 +301,12 @@ public:
             FieldDecl* field_decl = (*i)->getMember();
             assert(field_decl);
 
-            std::string new_field_name;
-            if (renameField(field_decl->getNameAsString(), new_field_name))
-            {
-                change_and_rewrite(field_decl, new_field_name, (*i)->getMemberLocation());
-            }
+            rewriteDecl(field_decl, (*i)->getMemberLocation());
         }
 
         return true;
     }
 
-
-    bool renameField(const std::string& field_name, std::string& new_name) const
-    {
-        const llvm::StringRef llvm_name(field_name);
-        if (!llvm_name.startswith("m_"))
-        {
-            std::stringstream ss;
-            if (llvm_name.startswith("_"))
-                ss << "m";
-            else
-                ss << "m_";
-            ss << field_name;
-            new_name = ss.str();
-            return true;
-        }
-
-        return false;
-    }
 };
 
 #endif // RENAME_CONSUMER_H
