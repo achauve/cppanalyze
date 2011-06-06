@@ -75,7 +75,6 @@ protected:
 
     bool shouldIgnoreLoc(SourceLocation loc)
     {
-        loc = m_source_manager.getInstantiationLoc(loc);
         if (loc.isInvalid()) return true;
 
         // ignore stuff from system headers
