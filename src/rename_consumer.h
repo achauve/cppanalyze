@@ -213,7 +213,7 @@ public:
         if (decl_name != new_name)
             m_rewriter.ReplaceText(loc,
                                    decl_name.length(),
-                                   renameDecl(d));
+                                   new_name);
     }
 
     //===--------------------------------------------------------------------===//
