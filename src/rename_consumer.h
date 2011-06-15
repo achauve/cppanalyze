@@ -26,33 +26,6 @@
 
 using namespace clang;
 
-/// getInstantiatedFrom - if the parent of this (FieldDecl* d) is an
-/// instanciation of a template class, return the corresponding FieldDecl* of this
-/// template class.
-FieldDecl* getInstantiatedFrom(FieldDecl const * const d)
-{
-    ClassTemplateSpecializationDecl const * const parent =
-        dyn_cast<ClassTemplateSpecializationDecl>(d->getParent());
-
-    // check the parent of this field is an instanciation of a class template
-    if (!parent || parent->getTemplateSpecializationKind() != TSK_ImplicitInstantiation)
-        return 0;
-
-    CXXRecordDecl const * const generic_parent =
-        parent->getSpecializedTemplate()->getTemplatedDecl();
-    assert(generic_parent);
-
-    for(CXXRecordDecl::field_iterator f=generic_parent->field_begin(),
-        e=generic_parent->field_end(); f != e; ++f)
-    {
-        if ((*f)->getNameAsString() == d->getNameAsString())
-            return *f;
-    }
-
-    // should never get here
-    return 0;
-}
-
 
 class CommonASTConsumer : public ASTConsumer
 {
@@ -243,11 +216,6 @@ public:
 
         FieldDecl *member_decl = dyn_cast<FieldDecl>(Node->getMemberDecl()); // ValueDecl : FieldDecl or CXXMethodDecl
         assert(member_decl);
-
-        if (FieldDecl *template_parent_field_decl = getInstantiatedFrom(member_decl))
-            member_decl = template_parent_field_decl;
-
-        if (shouldIgnoreLoc(member_decl->getLocation())) return true;
 
         assert(member_decl); // we handle only c++ code
         rewriteDecl(member_decl, Node->getMemberLoc());
