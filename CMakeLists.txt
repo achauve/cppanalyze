@@ -29,8 +29,19 @@ set(clang_used_libraries
     clangBasic
     )
 
+set(SRC_DIR "src")
+set(CPPANALYZE_SRC
+    ${SRC_DIR}/cppanalyze.cpp
+)
+set(CPPANALYZE_HEADERS
+    ${SRC_DIR}/rename_consumer.h
+)
 
-add_library(cppanalyze SHARED "src/cppanalyze.cpp")
+
+add_library(cppanalyze SHARED
+            ${CPPANALYZE_SRC}
+            ${CPPANALYZE_HEADERS}
+)
 
 target_link_libraries(cppanalyze
     ${clang_used_libraries}
