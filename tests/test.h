@@ -22,6 +22,11 @@ struct TemplateFoo
     {
         int_bar = rhs.int_bar;
     }
+
+    void copy(const TemplateFoo<T>& other)
+    {
+        int_bar = other.int_bar;
+    }
 };
 
 
