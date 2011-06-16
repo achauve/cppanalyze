@@ -249,11 +249,24 @@ public:
         FieldDecl *member_decl = dyn_cast<FieldDecl>(Node->getMemberDecl()); // ValueDecl : FieldDecl or CXXMethodDecl
         assert(member_decl);
 
-        printLoc(Node->getMemberLoc(), member_decl->getNameAsString());
+        // debug: printLoc(Node->getMemberLoc(), member_decl->getNameAsString());
         rewriteDecl(member_decl, Node->getMemberLoc());
         return true;
     }
 
+    bool VisitCXXDependentScopeMemberExpr(CXXDependentScopeMemberExpr* expr)
+    {
+        if (shouldIgnoreLoc(expr->getExprLoc())) return true;
+
+        // skip accesses that are not written in the sources
+        if (expr->isImplicitAccess())
+                return true;
+
+        DeclarationName member = expr->getMember();
+
+        //rewriteDecl(member_decl, expr->getMemberLoc());
+        return true;
+    }
 
     /// Visit decls
 
@@ -305,6 +318,7 @@ public:
 
         return true;
     }
+
 
 };
 
