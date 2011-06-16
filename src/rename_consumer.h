@@ -48,11 +48,16 @@ protected:
 
     bool shouldIgnoreLoc(SourceLocation loc)
     {
-        if (loc.isInvalid()) return true;
+        // get the location where the characters are actually written
+        loc = m_source_manager.getSpellingLoc(loc);
 
-        // ignore stuff from system headers
-        if (m_source_manager.isInSystemHeader(loc)) return true;
+        // then ignore loc that are either:
+        // - invalid
+        // - from system headers
+        // - not inside the specified source tree
 
+        if (loc.isInvalid() || m_source_manager.isInSystemHeader(loc))
+            return true;
 
         const FullSourceLoc full_loc(loc, m_source_manager);
         const FileEntry* const file_entry =
@@ -180,13 +185,40 @@ public:
 
     void rewriteDecl(NamedDecl * const d, const SourceLocation& loc)
     {
+        const SourceLocation rewrite_loc = m_source_manager.getSpellingLoc(loc);
         const std::string decl_name = d->getNameAsString();
         const std::string new_name = renameDecl(d);
 
         if (decl_name != new_name)
-            m_rewriter.ReplaceText(loc,
+            m_rewriter.ReplaceText(rewrite_loc,
                                    decl_name.length(),
                                    new_name);
+    }
+
+    /// useful for debug
+    void printLoc(const SourceLocation& loc, const std::string& msg="") const
+    {
+        const FullSourceLoc inst_full_loc(m_source_manager.getInstantiationLoc(loc), m_source_manager);
+        const FullSourceLoc spell_full_loc(m_source_manager.getSpellingLoc(loc), m_source_manager);
+        const FileEntry* inst_file_entry = m_source_manager.getFileEntryForID(inst_full_loc.getFileID());
+        const FileEntry* spell_file_entry = m_source_manager.getFileEntryForID(spell_full_loc.getFileID());
+
+        llvm::outs() << "---- " << msg << " loc:";
+
+        llvm::outs()<<"\n\t\t";
+        if (!inst_file_entry)
+            llvm::outs() << "No file entry for instanciation source location\n";
+        else
+            llvm::outs() << " ; Inst file=" << inst_file_entry->getName()
+                     << " ; Inst col=" << inst_full_loc.getInstantiationColumnNumber() << " line=" << inst_full_loc.getInstantiationLineNumber();
+
+        llvm::outs()<<"\n\t\t";
+        if (!spell_file_entry)
+            llvm::outs() << "No file entry for spelling source location\n";
+        else
+            llvm::outs() << " ; Spell file=" << spell_file_entry->getName()
+                     << " ; Spell col=" << spell_full_loc.getSpellingColumnNumber() << " line=" << spell_full_loc.getSpellingLineNumber()
+                     << "\n";
     }
 
     //===--------------------------------------------------------------------===//
@@ -217,7 +249,7 @@ public:
         FieldDecl *member_decl = dyn_cast<FieldDecl>(Node->getMemberDecl()); // ValueDecl : FieldDecl or CXXMethodDecl
         assert(member_decl);
 
-        assert(member_decl); // we handle only c++ code
+        printLoc(Node->getMemberLoc(), member_decl->getNameAsString());
         rewriteDecl(member_decl, Node->getMemberLoc());
         return true;
     }
