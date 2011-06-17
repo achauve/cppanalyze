@@ -77,6 +77,7 @@ protected:
     bool shouldIgnoreLoc(SourceLocation loc)
     {
         // get the location where the characters are actually written
+        // usefull for macros
         loc = m_source_manager.getSpellingLoc(loc);
 
         // then ignore loc that are either:
@@ -114,10 +115,6 @@ protected:
 class RenameConsumer : public CommonASTConsumer, public RecursiveASTVisitor<RenameConsumer>
 {
     Rewriter m_rewriter;
-
-    // store new names of given named declarations
-    typedef std::map<NamedDecl*, std::string> RenameMapType;
-    RenameMapType m_renamed_decls;
 
 public:
     RenameConsumer(CompilerInstance& compiler, const std::string src_root_dir):
@@ -183,43 +180,31 @@ public:
     // renaming/rewriting helpers
     //===--------------------------------------------------------------------===//
 
-    std::string renameDecl(NamedDecl * const decl)
+    std::string rename(const std::string& name)
     {
-        assert(decl);
+        const llvm::StringRef llvm_name(name);
+        if (llvm_name.startswith("m_"))
+            return name;
 
-        RenameMapType::const_iterator decl_it = m_renamed_decls.find(decl);
-        if (decl_it != m_renamed_decls.end())
-            return decl_it->second;
-
-        std::string decl_name = decl->getNameAsString();
-        const llvm::StringRef llvm_name(decl_name);
-        if (!llvm_name.startswith("m_"))
-        {
-            emitWarning(decl->getLocation(), "wrong name");
-
-            std::stringstream ss;
-            if (llvm_name.startswith("_"))
-                ss << "m";
-            else
-                ss << "m_";
-            ss << decl_name;
-            decl_name = ss.str();
-
-            m_renamed_decls[decl] = decl_name;
-        }
-
-        return decl_name;
+        std::stringstream ss;
+        if (llvm_name.startswith("_"))
+            ss << "m";
+        else
+            ss << "m_";
+        ss << name;
+        return ss.str();
     }
 
-    void rewriteDecl(NamedDecl * const d, const SourceLocation& loc)
+    void rewrite(const std::string& name, const SourceLocation& loc)
     {
+        // XXX too much warning
+        emitWarning(loc, "wrong name");
         const SourceLocation rewrite_loc = m_source_manager.getSpellingLoc(loc);
-        const std::string decl_name = d->getNameAsString();
-        const std::string new_name = renameDecl(d);
+        const std::string new_name = rename(name);
 
-        if (decl_name != new_name)
+        if (new_name != name)
             m_rewriter.ReplaceText(rewrite_loc,
-                                   decl_name.length(),
+                                   name.length(),
                                    new_name);
     }
 
@@ -284,7 +269,7 @@ public:
         if (shouldIgnoreLoc(member_decl->getLocation())) return true;
 
         // debug: printLoc(Node->getMemberLoc(), member_decl->getNameAsString());
-        rewriteDecl(member_decl, Node->getMemberLoc());
+        rewrite(member_decl->getNameAsString(), Node->getMemberLoc());
         return true;
     }
 
@@ -296,9 +281,11 @@ public:
         if (expr->isImplicitAccess())
                 return true;
 
-        DeclarationName member = expr->getMember();
+        const DeclarationName member = expr->getMember();
+        rewrite(member.getAsString(), expr->getMemberLoc());
 
-        //rewriteDecl(member_decl, expr->getMemberLoc());
+        //XXX how to get the decl for finer renaming?
+
         return true;
     }
 
@@ -323,7 +310,7 @@ public:
     {
         if (shouldIgnoreLoc(field_decl->getLocation())) return true;
 
-        rewriteDecl(field_decl, field_decl->getLocation());
+        rewrite(field_decl->getNameAsString(), field_decl->getLocation());
         return true;
     }
 
@@ -347,7 +334,7 @@ public:
             FieldDecl* field_decl = (*i)->getMember();
             assert(field_decl);
 
-            rewriteDecl(field_decl, (*i)->getMemberLocation());
+            rewrite(field_decl->getNameAsString(), (*i)->getMemberLocation());
         }
 
         return true;
