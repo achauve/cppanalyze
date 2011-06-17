@@ -29,5 +29,9 @@ int main()
     std::vector<int> arr(10);
     arr[0] = 1;
 
+    std::pair<int, int> couple;
+    couple.first = 0;
+    couple.second = 3;
+
     return 1;
 }
