@@ -112,9 +112,37 @@ protected:
 };
 
 
+bool rewriteFile(const boost::filesystem::path& renamed_file_path,
+                 const std::string& new_content)
+{
+    namespace fs = boost::filesystem;
+
+    if (!fs::exists(renamed_file_path))
+    {
+        std::ofstream out(renamed_file_path.c_str(), std::ios::out | std::ios::trunc);
+        assert(out.good());
+        out << new_content;
+        return true;
+    }
+
+    std::ifstream current_file(renamed_file_path.c_str());
+    assert(current_file.good());
+    std::stringstream is;
+    is << current_file.rdbuf();
+    const std::string current_content(is.str());
+
+    if (current_content == new_content)
+        return false;
+
+    return rewriteFile(fs::path(renamed_file_path.string() + ".1"),
+                       new_content);
+}
+
+
 class RenameConsumer : public CommonASTConsumer, public RecursiveASTVisitor<RenameConsumer>
 {
     Rewriter m_rewriter;
+    std::set<SourceLocation> m_rewrited_locations;
 
 public:
     RenameConsumer(CompilerInstance& compiler, const std::string src_root_dir):
@@ -138,8 +166,7 @@ public:
 
             const fs::path file_path(file_entry.getName());
             const fs::path renamed_path = "cppanalyze-renamed" / file_path.parent_path();
-            const fs::path renamed_file_path = renamed_path / file_path.filename();
-
+            fs::path renamed_file_path = renamed_path / file_path.filename();
             fs::create_directories(renamed_path);
 
             // Get the buffer corresponding to the current FileID.
@@ -147,13 +174,12 @@ public:
             if (const RewriteBuffer* rewriter_buffer =
                 m_rewriter.getRewriteBufferFor(*id))
             {
-                llvm::outs() << "--------------------\nSrc file changed: " << file_entry.getName() << "\n";
-                llvm::outs() << "===> Rewriting file: " << renamed_file_path.string() << "\n";
-                std::ofstream out(renamed_file_path.c_str(), std::ios::out | std::ios::trunc);
-                assert(out.good());
-                // XXX do not rewrite file if not neccessary; if file already
-                // exists, assert there is no diff
-                out << std::string(rewriter_buffer->begin(), rewriter_buffer->end());
+                const std::string rewrited_buffer(rewriter_buffer->begin(), rewriter_buffer->end());
+
+                if (rewriteFile(renamed_file_path, rewrited_buffer))
+                    llvm::outs() << "--------------------\nSrc file changed: rewriting " << file_entry.getName() << "\n";
+                else
+                    llvm::outs() << "--------------------\nNo changes from existing rewrited file for source file " << file_entry.getName() << "\n";
             }
             else
                 llvm::outs() << "--------------------\nNo changes in " << file_entry.getName() << "\n";
@@ -197,15 +223,21 @@ public:
 
     void rewrite(const std::string& name, const SourceLocation& loc)
     {
-        // XXX too much warning
-        emitWarning(loc, "wrong name");
         const SourceLocation rewrite_loc = m_source_manager.getSpellingLoc(loc);
+        if (m_rewrited_locations.find(rewrite_loc) != m_rewrited_locations.end())
+            return;
+
+        m_rewrited_locations.insert(rewrite_loc);
+
         const std::string new_name = rename(name);
 
         if (new_name != name)
+        {
+            emitWarning(rewrite_loc, "wrong name");
             m_rewriter.ReplaceText(rewrite_loc,
                                    name.length(),
                                    new_name);
+        }
     }
 
     /// useful for debug
