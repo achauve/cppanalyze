@@ -240,18 +240,6 @@ public:
 
     /// Visit statements
 
-    bool VisitCallExpr(CallExpr *Node)
-    {
-        // if (shouldIgnoreLoc(Node->getExprLoc())) return true;
-
-        // if (Node->getDirectCallee())
-        // {
-        //     FunctionDecl *func_decl = Node->getDirectCallee();
-        //     rewriteDecl(func_decl, Node->getLocStart());
-        // }
-        return true;
-    }
-
     bool VisitMemberExpr(MemberExpr *Node)
     {
         if (shouldIgnoreLoc(Node->getExprLoc())) return true;
