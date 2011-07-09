@@ -261,36 +261,78 @@ public:
         return true;
     }
 
-    bool VisitCXXDependentScopeMemberExpr(CXXDependentScopeMemberExpr* expr)
-    {
-        if (shouldIgnoreLoc(expr->getExprLoc())) return true;
-
-        // skip accesses that are not written in the sources
-        if (expr->isImplicitAccess())
-                return true;
-
-        const DeclarationName member = expr->getMember();
-        rewrite(member.getAsString(), expr->getMemberLoc());
-
-        //XXX how to get the decl for finer renaming?
-
-        return true;
-    }
 
     /// Visit decls
 
+    bool VisitCXXRecordDecl(CXXRecordDecl* class_decl)
+    {
+        if (shouldIgnoreLoc(class_decl->getLocation())) return true;
+
+        // Skip declarations
+        if (!class_decl->isThisDeclarationADefinition()) return true;
+
+        // Skip non template
+        ClassTemplateDecl * const template_class_decl =
+            class_decl->getDescribedClassTemplate();
+        if (!template_class_decl) return true;
+
+        llvm::outs() << "Visiting template class: " << class_decl->getName() << "\n";
+
+
+        // Walk through specializations (XXX not partial for now)
+        for (ClassTemplateDecl::spec_iterator spec_decl_it = template_class_decl->spec_begin(),
+             spec_decl_end = template_class_decl->spec_end();
+             spec_decl_it != spec_decl_end; ++spec_decl_it)
+        {
+            ClassTemplateSpecializationDecl * const spec_decl = *spec_decl_it;
+            llvm::outs() << "\t specialization: " << spec_decl->getName() << "\n";
+
+            // walk throug methods
+            for (CXXRecordDecl::method_iterator method_it = spec_decl->method_begin(),
+                 method_end = spec_decl->method_end();
+                 method_it != method_end; ++method_it)
+            {
+                CXXMethodDecl* const method_decl = *method_it;
+
+                // skip compiler auto generated methods
+                if (!method_decl->isUserProvided()) continue;
+
+                TraverseDecl(method_decl);
+
+                llvm::outs() << "\t method: " << method_decl->getName() << "\n";
+            }
+        }
+
+        llvm::outs().flush();
+        return true;
+    }
+
     bool VisitFunctionDecl(FunctionDecl* fun_decl)
     {
-        // if (shouldIgnoreLoc(fun_decl->getLocation())) return true;
+        if (shouldIgnoreLoc(fun_decl->getLocation())) return true;
 
-        // // ignore main function and methods
-        // if (!fun_decl->isMain() && !isa<CXXMethodDecl>(fun_decl))
-        // {
-        //     std::stringstream ss;
-        //     ss << fun_decl->getNameAsString() << "-renamed";
-        //     change_and_rewrite(fun_decl, ss.str(), fun_decl->getNameInfo().getLoc());
-        // }
+        // skip declarations
+        if (!fun_decl->isThisDeclarationADefinition()) return true;
 
+        // Skip non template
+        FunctionTemplateDecl* const template_fun_decl =
+                fun_decl->getDescribedFunctionTemplate();
+        if (!template_fun_decl) return true;
+
+        llvm::outs() << "Visiting template function: " << fun_decl->getName() << "\n";
+
+        // Walk through specializations (XXX not partial for now)
+        for (FunctionTemplateDecl::spec_iterator spec_decl_it = template_fun_decl->spec_begin(),
+             spec_decl_end = template_fun_decl->spec_end();
+             spec_decl_it != spec_decl_end; ++spec_decl_it)
+        {
+            FunctionDecl* const spec_decl = *spec_decl_it;
+            llvm::outs() << "\t specialization: " << spec_decl->getName() << "\n";
+
+            TraverseDecl(spec_decl);
+        }
+
+        llvm::outs().flush();
         return true;
     }
 
